@@ -23,7 +23,6 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  List<String> todos = List<String>.empty(growable: true);
   String input = "";
 
   createTodos() {
@@ -31,11 +30,16 @@ class _MyAppState extends State<MyApp> {
         FirebaseFirestore.instance.collection("MyTodos").doc(input);
 
     // Map
-    Map<String, String> todos = {"todosTitle": input};
+    Map<String, String> todos = {"todosTitle": input}; // Correct the field name to "todosTitle"
     documentReference.set(todos).whenComplete(() => "$input created");
   }
 
-  deleteTodos() {}
+  deleteTodos(item) {
+    DocumentReference documentReference =
+        FirebaseFirestore.instance.collection("MyTodos").doc(item);
+    documentReference.delete().whenComplete(() => "$item deleted");
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -43,42 +47,62 @@ class _MyAppState extends State<MyApp> {
         title: Text("myTodos"),
       ),
       floatingActionButton: FloatingActionButton(
-          onPressed: () {
-            showDialog(
-                context: context,
-                builder: (BuildContext context) {
-                  return AlertDialog(
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    title: Text("Add Todolist"),
-                    content: TextField(onChanged: (String value) {
-                      input = value;
-                    }),
-                    actions: <Widget>[
-                      TextButton(
-                          onPressed: () {
-                            createTodos();
-                            Navigator.of(context).pop();
-                          },
-                          child: Text("Add")),
-                    ],
-                  );
-                });
-          },
-          child: Icon(
-            Icons.add,
-            color: Colors.white,
-          )),
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                title: Text("Add Todolist"),
+                content: TextField(onChanged: (String value) {
+                  input = value;
+                }),
+                actions: <Widget>[
+                  TextButton(
+                    onPressed: () {
+                      createTodos();
+                      Navigator.of(context).pop();
+                    },
+                    child: Text("Add"),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+        child: Icon(
+          Icons.add,
+          color: Colors.white,
+        ),
+      ),
       body: StreamBuilder(
         stream: FirebaseFirestore.instance.collection("MyTodos").snapshots(),
         builder: (context, snapshots) {
+          if (snapshots.connectionState == ConnectionState.waiting) {
+            return CircularProgressIndicator();
+          }
+
+          if (snapshots.hasError) {
+            return Text('Error: ${snapshots.error}');
+          }
+
+          QuerySnapshot<Map<String, dynamic>> querySnapshot = snapshots.data!;
+          List<DocumentSnapshot<Map<String, dynamic>>> documents =
+              querySnapshot.docs;
+
           return ListView.builder(
             shrinkWrap: true,
-            itemCount: snapshots.data!.docs.length,
+            itemCount: documents.length,
             itemBuilder: (context, index) {
-              DocumentSnapshot documentSnapshot = snapshots.data!.docs[index];
+              DocumentSnapshot<Map<String, dynamic>> documentSnapshot =
+                  documents[index];
               return Dismissible(
-                key: Key(index.toString()),
+                onDismissed: (direction) {
+                  deleteTodos(documentSnapshot["todosTitle"]);
+                },
+                key: Key(documentSnapshot["todosTitle"]),
                 child: Card(
                   elevation: 4,
                   margin: EdgeInsets.all(8),
@@ -86,14 +110,11 @@ class _MyAppState extends State<MyApp> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: ListTile(
-                    // Use the correct field name here (todosTitle instead of todoTitle)
                     title: Text(documentSnapshot["todosTitle"]),
                     trailing: IconButton(
                       onPressed: () {
                         setState(() {
-                          // Also, you should update the list in your setState
-                          // to avoid inconsistencies with your data.
-                          todos.removeAt(index);
+                          deleteTodos(documentSnapshot["todosTitle"]);
                         });
                       },
                       icon: Icon(
